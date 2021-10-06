@@ -54,27 +54,22 @@ k = st.sidebar.selectbox('Kernel', (LinearKernel(), GaussianKernel(3),
 
 epsilon = st.sidebar.slider(r'$\epsilon$', min_value=.01, max_value=1.,
                     step=.01, value=.1)
-#k = GaussianKernel(sigma=st.sidebar.slider('sigma', min_value=0.01,
-#                                           max_value=100, step=.01, value=1.))
+
 alpha, alpha_hat = s.solve(X, y, C, k, epsilon)
 
 with st.expander(label='Optimization results'):
     col_alpha, col_alpha_hat = st.columns(2)
     with col_alpha:
-        st.latex(r'\alpha:')
-        alpha_df = pd.DataFrame(alpha)
-        alpha_df.index.name = 'alpha'
-        st.dataframe(alpha_df)
+        st.markdown(r'$\alpha$')
+        st.dataframe(alpha)
     with col_alpha_hat:
-        st.latex(r'\hat\alpha:')
+        st.markdown(r'$\hat\alpha$')
         alpha_hat
 
 sv = [(a - a_h, x) for a, a_h, x in zip(alpha, alpha_hat, X) if a - a_h != 0]
 
 def feature_dot(x_new, sv, kernel):
     return sum([a * kernel.compute(x, x_new) for (a, x) in sv])
-
-#w = sum([feature_dot(x, sv, k) for x in X])
 
 b_values = [y_ - feature_dot(x, sv, k) - epsilon
             for a, x, y_ in zip(alpha, X, y) if 0 < a < C]
@@ -117,12 +112,12 @@ st.latex(r'\hat\alpha_i(y_i + \epsilon + \hat\xi_i - w \cdot x_i - b) = 0')
 st.latex(r'\beta_i \xi_i = 0, \hat\beta_i \hat\xi_i = 0')
 st.latex(r'\gamma B \sum(\xi_i + \hat\xi_i) = 0')
 
-st.markdown(r'''So that if the optimal value of $\gamma$ is zero, $b$ is found
-   as usual, otherwise $b = y_i - \epsilon - w \cdot x_i$ with $i$ such that
-   $\alpha_i < C + \gamma$, still considering optimal values of variables.
-   Note that in both cases $b$ can be found considering $i$ such that
-   $\alpha_i < C + \gamma$.
-   Similar considerations hold for the hatted set of variables.''')
+st.markdown(r'''So that if the optimal value of $\gamma$ is zero, $b$ is
+   found as usual, otherwise $b = y_i - \epsilon - w \cdot x_i$ with $i$ such
+   that $\alpha_i < C + \gamma$, still considering optimal values of
+   variables. Note that in both cases $b$ can be found considering $i$ such
+   that $\alpha_i < C + \gamma$. Similar considerations hold for the hatted
+   set of variables.''')
 
 B = st.sidebar.slider('B', min_value=.01, max_value=3., step=.1, value=1.)
 
@@ -131,12 +126,10 @@ alpha, alpha_hat, gamma = s.solve(X, y, C, k, epsilon, budget=B)
 with st.expander(label='Optimization results'):
     col_alpha, col_alpha_hat, col_gamma = st.columns(3)
     with col_alpha:
-        st.latex(r'\alpha:')
-        alpha_df = pd.DataFrame(alpha)
-        alpha_df.index.name = 'alpha'
-        st.dataframe(alpha_df)
+        st.markdown(r'$\alpha$')
+        st.dataframe(alpha)
     with col_alpha_hat:
-        st.latex(r'\hat\alpha:')
+        st.markdown(r'$\hat\alpha$')
         alpha_hat
     with col_gamma:
         st.latex(rf'\gamma: {gamma}')
