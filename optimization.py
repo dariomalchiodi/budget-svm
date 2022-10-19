@@ -191,7 +191,8 @@ class GurobiSolver(Solver):
                 model.optimize()
 
                 if model.Status != GRB.OPTIMAL:
-                    raise ValueError('optimal solution not found!')
+                    raise ValueError('optimal solution not found! '
+                                     f'status={model.Status}')
 
                 alpha_opt = np.array([a.x for a in alpha])
                 alpha_hat_opt = np.array([a.x for a in alpha_hat])
