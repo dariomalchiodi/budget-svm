@@ -8,12 +8,7 @@ import os
 logger = logging.getLogger(__name__)
 
 from gurobipy import LinExpr, GRB, Model, Env, QuadExpr, GurobiError
-
-def clip(x, left, right, tolerance=10**-5):
-    clipped = x if abs(x - left) >= tolerance else left
-    if right < np.inf:
-        clipped = clipped if abs(x - right) >= tolerance else right
-    return clipped
+from kernel import GaussianKernel
 
 class Solver:
     """Abstract solver for optimization problems.
@@ -24,10 +19,65 @@ class Solver:
     of the feasible region.
     """
 
-    def solve_problem(self, *args):
-        pass
+    def __init__(self, problem='classification'):
+        self.problem = problem
+        self.solve_dispatch = {'classification': self.solve_classification_problem,
+                          'regression': self.solve_regression_problem}
 
-    def solve(self, X, y, C, kernel, epsilon, budget=None):
+        self.clip_dispatch = {'classification': self.clip_classification_solution,
+                         'regression': self.clip_regression_solution}
+
+    def clip_regression_solution(self, solution, budget, C):
+        alpha, alpha_hat = solution[:2]
+        if budget is not None:
+            gamma = solution[-1]
+
+        if budget is None:
+            alpha_clipped = np.clip(alpha, 0, C)
+            alpha_clipped[np.isclose(alpha_clipped, 0)] = 0
+            alpha_clipped[np.isclose(alpha_clipped, C)] = C
+            alpha_hat_clipped = np.clip(alpha_hat, 0, C)
+            alpha_hat_clipped[np.isclose(alpha_hat_clipped, 0)] = 0
+            alpha_hat_clipped[np.isclose(alpha_hat_clipped, C)] = C
+            optimal_values = alpha_clipped, alpha_hat_clipped
+        else:
+            alpha_clipped = np.clip(alpha, 0, np.inf)
+            alpha_clipped[np.isclose(alpha_clipped, 0)] = 0
+            alpha_hat_clipped = np.clip(alpha_hat, 0, np.inf)
+            alpha_hat_clipped[np.isclose(alpha_hat_clipped, 0)] = 0
+            gamma_clipped = np.clip(gamma, 0, np.inf)
+            gamma_clipped[np.isclose(gamma_clipped, 0)] = 0
+            optimal_values = alpha_clipped, alpha_hat_clipped, gamma_clipped
+        
+        return optimal_values
+
+    def clip_classification_solution(self, solution, budget, C):
+        solution = np.array(solution)
+        if budget is None:
+            alpha = solution
+        else:
+            alpha, gamma = solution
+            gamma[np.isclose(gamma, 0)] = 0
+            gamma[np.isclose(gamma, 1)] = 1
+            print(gamma)
+        
+        alpha[np.isclose(alpha, 0)] = 0
+        alpha[np.isclose(alpha, C)] = C
+        print(alpha, 'clipped')
+
+        if budget is not None:
+            alpha[gamma == 0] = 0
+
+        return alpha
+
+
+    def solve_problem(self, *args, **kwargs):
+        solve = self.solve_dispatch[self.problem]
+        return solve(*args, **kwargs)
+
+            
+    def solve(self, X, y, C=1, kernel=GaussianKernel(), budget=None,
+              **kwargs):
         """Solve optimization phase.
 
         Build and solve the constrained optimization problem on the basis
@@ -51,26 +101,13 @@ class Solver:
             raise ValueError('C should be positive')
 
         y = np.array(y)
-        solution = self.solve_problem(X, y, C, kernel, epsilon, budget)
-
-        if budget is None:
-            alpha, alpha_hat = solution
-        else:
-            alpha, alpha_hat, gamma = solution
-
-        if budget is None:
-            alpha_clipped = np.array([clip(a, 0, C) for a in alpha])
-            alpha_hat_clipped = np.array([clip(a, 0, C) for a in alpha_hat])
-        else:
-            alpha_clipped = np.array([clip(a, 0, np.inf) for a in alpha])
-            alpha_hat_clipped = np.array([clip(a, 0, np.inf) for a in alpha_hat])
-            gamma_clipped = clip(gamma, 0, np.inf)
-
-        if budget is None:
-            optimal_values = alpha_clipped, alpha_hat_clipped
-        else:
-            optimal_values = alpha_clipped, alpha_hat_clipped, gamma_clipped
-
+        
+        solution = self.solve_problem(X, y, C=C, kernel=kernel, budget=budget,
+                                      **kwargs)
+        clip = self.clip_dispatch[self.problem]
+        
+        optimal_values = clip(solution, budget, C)
+        
         return optimal_values
 
 
@@ -85,10 +122,13 @@ class GurobiSolver(Solver):
     via the gurobipy package.
     """
 
-    def __init__(self, time_limit=10*60, initial_values=None):
+    def __init__(self, problem='classification', time_limit=10*60,
+                 initial_values=None):
         """
         Build an object of type GurobiSolver.
 
+        :param problem: Type of problem to be solved.
+        :type problem: str ('classification' and 'regression' are allowed)
         :param time_limit: Maximum time (in seconds) before stopping iterative
           optimization, defaults to 10*60.
         :type time_limit: int
@@ -96,10 +136,136 @@ class GurobiSolver(Solver):
           problem, defaults to None.
         :type initial_values: iterable of floats or None
         """
+        super().__init__(problem)
         self.time_limit = time_limit
         self.initial_values = initial_values
+    
+    def solve_problem(self, *args, **kwargs):
+        """
+        """
+        if self.problem == 'classification':
+            return self.solve_classification_problem(*args, **kwargs)
+        else:
+            return self.solve_regression_problem(*args, **kwargs)
 
-    def solve_problem(self, X, y, C, kernel, epsilon, budget=None):
+    def solve_classification_problem(self, X, y, C=1, kernel=GaussianKernel(),
+                                     budget=None):
+        """Optimize the classification-based optimization problem via gurobi.
+
+        Build and solve the constrained optimization problem at the basis
+        of SV classification, either classic or budgeted, using the gurobi
+        API.
+
+        :param X: Objects in training set.
+        :type X: iterable
+        :param y: Binary labels for the objects in `xs`.
+        :type y: iterable
+        :param C: constant managing the trade-off in joint complexity/error
+                  optimization.
+        :type C: float
+        :param kernel: Kernel function to be used.
+        :type kernel: :class:`mulearn.kernel.Kernel`
+        :param budget: value of the budget (None in case of standard
+                       classification).
+        :type budget: float
+        :raises: ValueError if C is non-positive, budget is specified as a
+                 negative value or if X and y have different lengths.
+        :returns: `list` -- optimal values for the independent variables
+          of the problem."""
+
+        m = len(X)
+        assert m == len(y)
+
+        assert C > 0
+        if budget is not None:
+            assert budget > 0
+
+        with Env(empty=True) as env:
+            env.setParam('OutputFlag', 0)
+            env.start()
+            with Model('svc', env=env) as model:
+                model.setParam('OutputFlag', 0)
+                model.setParam('TimeLimit', self.time_limit)
+                if budget is not None:
+                    model.setParam('NonConvex', 2)
+
+                for i in range(m):
+                    model.addVar(name=f'alpha_{i}', lb=0, ub=C,
+                                 vtype=GRB.CONTINUOUS)
+                if budget is not None:
+                    for i in range(m):
+                        model.addVar(name=f'gamma_{i}', lb=0, ub=1,
+                                     vtype=GRB.CONTINUOUS)
+
+                model.update()
+                vars = model.getVars()
+
+                alpha = np.array(vars[:m])
+                if budget is not None:
+                    gamma = np.array(vars[m:])
+
+                if self.initial_values is not None:
+                    for a, i in zip(alpha, self.initial_values[0]):
+                        a.start = i
+
+                    if budget is not None:
+                        for g, i in zip(gamma, self.initial_values[0]):
+                            g.start = i
+
+                obj = QuadExpr()
+
+                for a in alpha:
+                    obj.add(a, 1)
+
+                for i, j in it.product(range(m), range(m)):
+                    obj.add(alpha[i] * alpha[j],
+                            - 0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]))
+                
+                penalty = lambda gamma: -sum([g*(1-g) for g in gamma])
+                #penalty = lambda gamma: sum([g**g * (1-g)**(1-g) for g in gamma])
+                # TODO: add other penalty, with argument to the method
+
+                if budget is not None:
+                    obj.add(penalty(gamma), 1000)
+
+                model.setObjective(obj, GRB.MAXIMIZE)
+
+                constEqual = LinExpr()
+                constEqual.add(sum(alpha * y), 1.0)
+
+                model.addLConstr(constEqual, GRB.EQUAL, 0)
+
+                if budget is not None:
+                    for a, g in zip(alpha, gamma):
+                        const = QuadExpr()
+                        const.add(a, 1.0)
+                        model.addQConstr(const,GRB.LESS_EQUAL, C * g)
+
+                    const = LinExpr()
+                    const.add(sum(gamma), 1.0)
+                    model.addLConstr(const,GRB.LESS_EQUAL, budget)
+
+                model.optimize()
+
+                # TODO: check other status values
+                if model.Status != GRB.OPTIMAL:
+                    raise ValueError('optimal solution not found! '
+                                     f'status={model.Status}')
+
+                alpha_opt = np.array([a.x for a in alpha])
+                if budget is not None:
+                    gamma_opt = np.array([g.x for g in gamma])
+
+
+
+                solution = (alpha_opt, gamma_opt) if budget is not None \
+                    else alpha_opt
+
+                return solution
+    
+    
+    def solve_regression_problem(self, X, y, C=1, kernel=GaussianKernel(),
+                                 epsilon=0.1, budget=None):
         """Optimize via gurobi.
 
         Build and solve the constrained optimization problem at the basis
