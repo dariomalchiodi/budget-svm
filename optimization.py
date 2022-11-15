@@ -194,8 +194,9 @@ class GurobiSolver(Solver):
                                  vtype=GRB.CONTINUOUS)
                 if budget is not None:
                     for i in range(m):
-                        model.addVar(name=f'gamma_{i}', lb=0, ub=1,
-                                     vtype=GRB.CONTINUOUS)
+                        model.addVar(name=f'gamma_{i}', vtype=GRB.BINARY)
+                        # model.addVar(name=f'gamma_{i}', lb=0, ub=1,
+                        #             vtype=GRB.CONTINUOUS)
 
                 model.update()
                 vars = model.getVars()
@@ -226,7 +227,8 @@ class GurobiSolver(Solver):
                 # TODO: add other penalty, with argument to the method
 
                 if budget is not None:
-                    obj.add(penalty(gamma), 1000)
+                    # obj.add(penalty(gamma), 1000)
+                    pass
 
                 model.setObjective(obj, GRB.MAXIMIZE)
 
