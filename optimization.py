@@ -59,11 +59,9 @@ class Solver:
             alpha, gamma = solution
             gamma[np.isclose(gamma, 0)] = 0
             gamma[np.isclose(gamma, 1)] = 1
-            print(gamma)
         
         alpha[np.isclose(alpha, 0)] = 0
         alpha[np.isclose(alpha, C)] = C
-        print(alpha, 'clipped')
 
         if budget is not None:
             alpha[gamma == 0] = 0
@@ -187,7 +185,8 @@ class GurobiSolver(Solver):
                 model.setParam('OutputFlag', 0)
                 model.setParam('TimeLimit', self.time_limit)
                 if budget is not None:
-                    model.setParam('NonConvex', 2)
+                    # model.setParam('NonConvex', 2)
+                    pass
 
                 for i in range(m):
                     model.addVar(name=f'alpha_{i}', lb=0, ub=C,
