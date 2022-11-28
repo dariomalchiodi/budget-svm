@@ -118,6 +118,10 @@ class PolynomialKernel(Kernel):
         """Return the python representation of the kernel."""
         return f"PolynomialKernel({self.degree})"
 
+    def __eq__(self, other):
+        return isinstance(other, PolynomialKernel) and \
+                self.degree == other.degree
+
 
 class HomogeneousPolynomialKernel(PolynomialKernel):
     """Homogeneous polynomial kernel class."""
@@ -150,6 +154,10 @@ class HomogeneousPolynomialKernel(PolynomialKernel):
     def __repr__(self):
         """Return the python representation of the kernel."""
         return f"HomogeneousPolynomialKernel({self.degree})"
+    
+    def __eq__(self, other):
+        return isinstance(other, PolynomialKernel) and \
+                self.degree == other.degree
 
 
 class GaussianKernel(Kernel):
@@ -194,6 +202,10 @@ class GaussianKernel(Kernel):
             obj_repr += f"sigma={self.sigma}"
         obj_repr += ")"
         return obj_repr
+    
+    def __eq__(self, other):
+        return isinstance(other, GaussianKernel) and \
+                self.sigma == other.sigma
 
 
 class HyperbolicKernel(Kernel):
@@ -243,6 +255,10 @@ class HyperbolicKernel(Kernel):
         else:
             return "HyperbolicKernel()"
 
+    def __eq__(self, other):
+        return isinstance(other, HyperbolicKernel) and \
+                self.scale == other.scale and self.offset == other.offset
+
 
 class PrecomputedKernel(Kernel):
     """Precomputed kernel class."""
@@ -285,3 +301,7 @@ class PrecomputedKernel(Kernel):
     def __repr__(self):
         """Return the python representation of the kernel."""
         return f"PrecomputedKernel({self.kernel_computations})"
+    
+    def __eq__(self, other):
+        return isinstance(other, PrecomputedKernel) and \
+                self.kernel_computations == other.kernel_computations

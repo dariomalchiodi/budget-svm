@@ -262,7 +262,7 @@ class GurobiSolver(Solver):
                 solution = (alpha_opt, gamma_opt) if budget is not None \
                     else alpha_opt
 
-                return solution
+                return np.array(solution)
     
     
     def solve_regression_problem(self, X, y, C=1, kernel=GaussianKernel(),
@@ -370,7 +370,7 @@ class GurobiSolver(Solver):
                 solution = (alpha_opt, alpha_hat_opt) \
                     if budget is None else (alpha_opt, alpha_hat_opt, gamma_opt)
 
-                return solution
+                return np.array(solution)
 
     def __repr__(self):
         return f"GurobiSolver(time_limit={self.time_limit}, " + \
