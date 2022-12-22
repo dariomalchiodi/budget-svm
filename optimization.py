@@ -120,7 +120,7 @@ class GurobiSolver(Solver):
     via the gurobipy package.
     """
 
-    def __init__(self, problem='classification', time_limit=10*60,
+    def __init__(self, problem='classification', time_limit=60,
                  initial_values=None):
         """
         Build an object of type GurobiSolver.
