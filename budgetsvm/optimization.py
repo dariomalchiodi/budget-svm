@@ -8,7 +8,8 @@ import os
 logger = logging.getLogger(__name__)
 
 from gurobipy import LinExpr, GRB, Model, Env, QuadExpr, GurobiError
-from kernel import GaussianKernel
+from budgetsvm.kernel import GaussianKernel
+
 
 class Solver:
     """Abstract solver for optimization problems.

@@ -6,8 +6,9 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils.validation import check_X_y, check_array
 from sklearn.utils import check_random_state
 
-import kernel
-import optimization as opt
+from budgetsvm import kernel
+from budgetsvm import optimization as opt
+
 
 class SVC(BaseEstimator):
     def __init__(self, C=1, kernel=kernel.GaussianKernel(),
