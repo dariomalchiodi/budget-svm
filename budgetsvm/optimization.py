@@ -1,9 +1,8 @@
+from abc import ABC, abstractmethod
 
 import numpy as np
 import itertools as it
-from collections.abc import Iterable
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -11,12 +10,12 @@ from gurobipy import LinExpr, GRB, Model, Env, QuadExpr, GurobiError
 from budgetsvm.kernel import GaussianKernel
 
 
-class Solver:
+class Solver(ABC):
     """Abstract solver for optimization problems.
 
     The base class for solvers is :class:`Solver`: it exposes a method
     `solve` which delegates the numerical optimization process to an abstract
-    method `solve_problem` and subsequently clips the results to the boundaries
+    method `solve_<problem_type>_problem` and subsequently clips the results to the boundaries
     of the feasible region.
     """
 
@@ -28,7 +27,16 @@ class Solver:
         self.clip_dispatch = {'classification': self.clip_classification_solution,
                          'regression': self.clip_regression_solution}
 
-    def clip_regression_solution(self, solution, budget, C):
+    @abstractmethod
+    def solve_classification_problem(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def solve_regression_problem(self, *args, **kwargs):
+        pass
+
+    @staticmethod
+    def clip_regression_solution(solution, budget, C):
         alpha, alpha_hat = solution[:2]
         if budget is not None:
             gamma = solution[-1]
@@ -49,10 +57,11 @@ class Solver:
             gamma_clipped = np.clip(gamma, 0, np.inf)
             gamma_clipped[np.isclose(gamma_clipped, 0)] = 0
             optimal_values = alpha_clipped, alpha_hat_clipped, gamma_clipped
-        
+
         return optimal_values
 
-    def clip_classification_solution(self, solution, budget, C):
+    @staticmethod
+    def clip_classification_solution(solution, budget, C):
         solution = np.array(solution)
         if budget is None:
             alpha = solution
@@ -60,7 +69,7 @@ class Solver:
             alpha, gamma = solution
             gamma[np.isclose(gamma, 0)] = 0
             gamma[np.isclose(gamma, 1)] = 1
-        
+
         alpha[np.isclose(alpha, 0)] = 0
         alpha[np.isclose(alpha, C)] = C
 
@@ -69,14 +78,7 @@ class Solver:
 
         return alpha
 
-
-    def solve_problem(self, *args, **kwargs):
-        solve = self.solve_dispatch[self.problem]
-        return solve(*args, **kwargs)
-
-            
-    def solve(self, X, y, C=1, kernel=GaussianKernel(), budget=None,
-              **kwargs):
+    def solve(self, X, y, C=1, kernel=GaussianKernel(), budget=None, **kwargs):
         """Solve optimization phase.
 
         Build and solve the constrained optimization problem on the basis
@@ -91,6 +93,8 @@ class Solver:
         :type C: float
         :param kernel: Kernel function to be used.
         :type kernel: :class:`mulearn.kernel.Kernel`
+        :param budget: constant, upper bound on the number of support vectors
+        :type budget: int
         :raises: ValueError if C is non-positive or if xs and mus have
           different lengths.
         :returns: `list` -- optimal values for the independent variables
@@ -100,13 +104,13 @@ class Solver:
             raise ValueError('C should be positive')
 
         y = np.array(y)
-        
-        solution = self.solve_problem(X, y, C=C, kernel=kernel, budget=budget,
-                                      **kwargs)
-        clip = self.clip_dispatch[self.problem]
-        
-        optimal_values = clip(solution, budget, C)
-        
+
+        solve_fn = self.solve_dispatch[self.problem]
+        solution = solve_fn(X, y, C=C, kernel=kernel, budget=budget, **kwargs)
+
+        clip_fn = self.clip_dispatch[self.problem]
+        optimal_values = clip_fn(solution, budget, C)
+
         return optimal_values
 
 
@@ -138,14 +142,6 @@ class GurobiSolver(Solver):
         super().__init__(problem)
         self.time_limit = time_limit
         self.initial_values = initial_values
-    
-    def solve_problem(self, *args, **kwargs):
-        """
-        """
-        if self.problem == 'classification':
-            return self.solve_classification_problem(*args, **kwargs)
-        else:
-            return self.solve_regression_problem(*args, **kwargs)
 
     def solve_classification_problem(self, X, y, C=1, kernel=GaussianKernel(),
                                      budget=None):
@@ -258,14 +254,11 @@ class GurobiSolver(Solver):
                 if budget is not None:
                     gamma_opt = np.array([g.x for g in gamma])
 
-
-
                 solution = (alpha_opt, gamma_opt) if budget is not None \
                     else alpha_opt
 
                 return np.array(solution)
-    
-    
+
     def solve_regression_problem(self, X, y, C=1, kernel=GaussianKernel(),
                                  epsilon=0.1, budget=None):
         """Optimize via gurobi.
