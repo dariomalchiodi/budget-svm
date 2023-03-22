@@ -3,12 +3,12 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score
 
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_X_y, check_array
 from sklearn.utils import check_random_state
-from sklearn.exceptions import NotFittedError
 
-import kernel
-import optimization as opt
+from budgetsvm import kernel
+from budgetsvm import optimization as opt
+
 
 class SVC(BaseEstimator):
     def __init__(self, C=1, kernel=kernel.GaussianKernel(),
@@ -112,8 +112,8 @@ if __name__ == '__main__':
     # print(model)
     # print(sum(model.alpha > 0))
 
-    from optimization import GurobiSolver
-    from kernel import LinearKernel, PolynomialKernel, GaussianKernel
+    from kernel import LinearKernel
+
 
     def generate_data(n=10, split=0.5):
         y = np.random.uniform(size=n)
