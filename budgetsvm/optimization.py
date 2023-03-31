@@ -22,10 +22,10 @@ class Solver(ABC):
     def __init__(self, problem='classification'):
         self.problem = problem
         self.solve_dispatch = {'classification': self.solve_classification_problem,
-                          'regression': self.solve_regression_problem}
+                               'regression': self.solve_regression_problem}
 
         self.clip_dispatch = {'classification': self.clip_classification_solution,
-                         'regression': self.clip_regression_solution}
+                              'regression': self.clip_regression_solution}
 
     @abstractmethod
     def solve_classification_problem(self, *args, **kwargs):
@@ -106,12 +106,12 @@ class Solver(ABC):
         y = np.array(y)
 
         solve_fn = self.solve_dispatch[self.problem]
-        solution = solve_fn(X, y, C=C, kernel=kernel, budget=budget, **kwargs)
+        solution, optimal = solve_fn(X, y, C=C, kernel=kernel, budget=budget, **kwargs)
 
         clip_fn = self.clip_dispatch[self.problem]
         optimal_values = clip_fn(solution, budget, C)
 
-        return optimal_values
+        return optimal_values, optimal
 
 
 class GurobiSolver(Solver):
@@ -217,9 +217,9 @@ class GurobiSolver(Solver):
                 for i, j in it.product(range(m), range(m)):
                     obj.add(alpha[i] * alpha[j],
                             - 0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]))
-                
-                penalty = lambda gamma: -sum([g*(1-g) for g in gamma])
-                #penalty = lambda gamma: sum([g**g * (1-g)**(1-g) for g in gamma])
+
+                penalty = lambda gamma: -sum([g * (1 - g) for g in gamma])
+                # penalty = lambda gamma: sum([g**g * (1-g)**(1-g) for g in gamma])
                 # TODO: add other penalty, with argument to the method
 
                 if budget is not None:
@@ -237,18 +237,18 @@ class GurobiSolver(Solver):
                     for a, g in zip(alpha, gamma):
                         const = QuadExpr()
                         const.add(a, 1.0)
-                        model.addQConstr(const,GRB.LESS_EQUAL, C * g)
+                        model.addQConstr(const, GRB.LESS_EQUAL, C * g)
 
                     const = LinExpr()
                     const.add(sum(gamma), 1.0)
-                    model.addLConstr(const,GRB.LESS_EQUAL, budget)
+                    model.addLConstr(const, GRB.LESS_EQUAL, budget)
 
                 model.optimize()
 
-                # TODO: check other status values
                 if model.Status != GRB.OPTIMAL:
-                    raise ValueError('optimal solution not found! '
-                                     f'status={model.Status}')
+                    if model.Status != GRB.TIME_LIMIT or model.SolCount == 0:
+                        raise ValueError('optimal solution not found! '
+                                         f'status={model.Status}')
 
                 alpha_opt = np.array([a.x for a in alpha])
                 if budget is not None:
@@ -257,7 +257,7 @@ class GurobiSolver(Solver):
                 solution = (alpha_opt, gamma_opt) if budget is not None \
                     else alpha_opt
 
-                return np.array(solution)
+                return np.array(solution), model.Status == GRB.OPTIMAL
 
     def solve_regression_problem(self, X, y, C=1, kernel=GaussianKernel(),
                                  epsilon=0.1, budget=None):
@@ -308,7 +308,7 @@ class GurobiSolver(Solver):
 
                 gamma = vars[-1]
                 alpha = np.array(vars[:m])
-                alpha_hat = np.array(vars[m:2*m])
+                alpha_hat = np.array(vars[m:2 * m])
 
                 if self.initial_values is not None:
                     for a, i in zip(alpha, self.initial_values[0]):
@@ -343,11 +343,11 @@ class GurobiSolver(Solver):
                     for a in alpha:
                         const = LinExpr()
                         const.add(a - gamma, 1.0)
-                        model.addLConstr(const,GRB.LESS_EQUAL, C)
+                        model.addLConstr(const, GRB.LESS_EQUAL, C)
                     for a in alpha_hat:
                         const = LinExpr()
                         const.add(a - gamma, 1.0)
-                        model.addLConstr(const,GRB.LESS_EQUAL, C)
+                        model.addLConstr(const, GRB.LESS_EQUAL, C)
 
                 model.optimize()
 
@@ -368,4 +368,4 @@ class GurobiSolver(Solver):
 
     def __repr__(self):
         return f"GurobiSolver(time_limit={self.time_limit}, " + \
-               f"initial_values={self.initial_values})"
+            f"initial_values={self.initial_values})"
