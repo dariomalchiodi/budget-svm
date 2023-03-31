@@ -32,6 +32,18 @@ class SVC(ClassifierMixin, BaseEstimator):
 
         return repr + ')'
 
+    def __encode_label(self, original):
+        # map [0,1] labels to [-1,1] labels
+        return -1 if original == 0 else 1
+    def __vec_encode_label(self, it):
+        return np.vectorize(self.__encode_label)(it)
+    def __decode_label(self, encoded):
+        # map [-1,1] labels to original labels
+        return self.classes_[0] if encoded == -1 else self.classes_[1]
+
+    def __vec_decode_label(self, it):
+        return np.vectorize(self.__decode_label)(it)
+
     def fit(self, X, y, warn=False):
         X, y = check_X_y(X, y)
 
@@ -41,9 +53,7 @@ class SVC(ClassifierMixin, BaseEstimator):
         if len(self.classes_) > 2:
             raise ValueError("Classifier can't train when more than two classes are present.")
 
-        self._encode_label = np.vectorize(lambda original: -1 if original == 0 else 1)
-        self._decode_label = np.vectorize(lambda encoded: self.classes_[0] if encoded == -1 else self.classes_[1])
-        y = self._encode_label(y)
+        y = self.__vec_encode_label(y)
 
         solver = opt.GurobiSolver()
         alpha = solver.solve(X, y, C=self.C, kernel=self.kernel, budget=self.budget)
@@ -54,27 +64,27 @@ class SVC(ClassifierMixin, BaseEstimator):
         self.X_ = X[sv_mask]
         self.y_ = y[sv_mask]
 
-        def dotprod(x_new):
-            return np.sum([a * y_i * self.kernel.compute(x, x_new) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)])
-
-        bs = [y_i - dotprod(x) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)]
+        bs = [y_i - self.__dotprod(x) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)]
         if not bs:
             raise FitFailedWarning('no SV founds')
-        b = np.mean(bs)
+
+        self.b_ = np.mean(bs)
         if warn and np.std(bs) > 1E-4:
             print('warning: computed values for b are', bs)
 
-        self.df = lambda x: dotprod(x) + b
         return self
 
-    def decision_function(self, X):
-        return np.array([self.df(x) for x in X])
+    def __dotprod(self, x_new):
+        return np.sum([a * y_i * self.kernel.compute(x, x_new) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)])
+
+    def __decision_function(self, X):
+        return np.array([self.__dotprod(x) + self.b_ for x in X])
 
     def predict(self, X):
         check_is_fitted(self)
         X = check_array(X)
-        encoded_label = np.sign(self.decision_function(X))
-        return self._decode_label(encoded_label)
+        encoded_label = np.sign(self.__decision_function(X))
+        return self.__vec_decode_label(encoded_label)
 
     def score(self, X, y, **kwargs):
         return accuracy_score(self.predict(X), y)
