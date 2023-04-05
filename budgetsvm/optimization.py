@@ -247,7 +247,7 @@ class GurobiSolver(Solver):
 
                 if model.Status != GRB.OPTIMAL:
                     if model.Status != GRB.TIME_LIMIT or model.SolCount == 0:
-                        raise ValueError('optimal solution not found! '
+                        raise ValueError('no solution found! '
                                          f'status={model.Status}')
 
                 alpha_opt = np.array([a.x for a in alpha])
