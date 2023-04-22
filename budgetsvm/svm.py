@@ -17,26 +17,28 @@ class SVC(ClassifierMixin, BaseEstimator):
         self.budget = budget
 
     def __repr__(self):
-        repr = 'SVM('
+        repr = "SVM("
         if self.C != 1:
-            repr += f'C={self.C}, '
+            repr += f"C={self.C}, "
 
         if self.kernel != kernel.GaussianKernel():
-            repr += f'kernel={self.kernel}, '
+            repr += f"kernel={self.kernel}, "
 
         if self.budget is not None:
-            repr += f'budget={self.budget}, '
+            repr += f"budget={self.budget}, "
 
-        if repr[-2:] == ', ':
+        if repr[-2:] == ", ":
             repr = repr[:-2]
 
-        return repr + ')'
+        return repr + ")"
 
     def __encode_label(self, original):
         # map [0,1] labels to [-1,1] labels
         return -1 if original == 0 else 1
+
     def __vec_encode_label(self, it):
         return np.vectorize(self.__encode_label)(it)
+
     def __decode_label(self, encoded):
         # map [-1,1] labels to original labels
         return self.classes_[0] if encoded == -1 else self.classes_[1]
@@ -51,12 +53,16 @@ class SVC(ClassifierMixin, BaseEstimator):
         if len(self.classes_) == 1:
             raise ValueError("Classifier can't train when only one class is present.")
         if len(self.classes_) > 2:
-            raise ValueError("Classifier can't train when more than two classes are present.")
+            raise ValueError(
+                "Classifier can't train when more than two classes are present."
+            )
 
         y = self.__vec_encode_label(y)
 
         solver = opt.GurobiSolver()
-        alpha, optimal = solver.solve(X, y, C=self.C, kernel=self.kernel, budget=self.budget)
+        alpha, optimal = solver.solve(
+            X, y, C=self.C, kernel=self.kernel, budget=self.budget
+        )
 
         sv_mask = (0 < alpha) & (alpha < self.C)
 
@@ -64,19 +70,26 @@ class SVC(ClassifierMixin, BaseEstimator):
         self.X_ = X[sv_mask]
         self.y_ = y[sv_mask]
 
-        bs = [y_i - self.__dotprod(x) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)]
+        bs = [
+            y_i - self.__dotprod(x) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)
+        ]
         if not bs:
-            raise FitFailedWarning('no SV founds')
+            raise FitFailedWarning("no SV founds")
 
         self.b_ = np.mean(bs)
-        if warn and np.std(bs) > 1E-4:
-            print('warning: computed values for b are', bs)
+        if warn and np.std(bs) > 1e-4:
+            print("warning: computed values for b are", bs)
 
         self.optimal_ = optimal
         return self
 
     def __dotprod(self, x_new):
-        return np.sum([a * y_i * self.kernel.compute(x, x_new) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)])
+        return np.sum(
+            [
+                a * y_i * self.kernel.compute(x, x_new)
+                for x, y_i, a in zip(self.X_, self.y_, self.alpha_)
+            ]
+        )
 
     def __decision_function(self, X):
         return np.array([self.__dotprod(x) + self.b_ for x in X])
@@ -91,7 +104,7 @@ class SVC(ClassifierMixin, BaseEstimator):
         return accuracy_score(self.predict(X), y)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # print('lanciato script')
     # from sklearn.model_selection import GridSearchCV
 
@@ -118,23 +131,21 @@ if __name__ == '__main__':
 
     from kernel import LinearKernel
 
-
     def generate_data(n=10, split=0.5):
         y = np.random.uniform(size=n)
         n_pos = int(n * split)
         y_pos = y[:n_pos]
         y_neg = y[n_pos:]
-        return np.array([[0.2, y] for y in y_pos] + \
-                        [[0.8, y] for y in y_neg]), \
-            [1] * n_pos + [-1] * (n - n_pos)
-
+        return np.array([[0.2, y] for y in y_pos] + [[0.8, y] for y in y_neg]), [
+            1
+        ] * n_pos + [-1] * (n - n_pos)
 
     X, y = generate_data(n=100)
 
     svc = SVC(C=10, kernel=LinearKernel(), budget=None)
     svc.fit(X, y)
-    print(f'classic SVM used {len(svc.alpha_)} SVs.')
+    print(f"classic SVM used {len(svc.alpha_)} SVs.")
 
     svc = SVC(C=10, kernel=LinearKernel(), budget=3)
     svc.fit(X, y)
-    print(f'budget SVM used {len(svc.alpha_)} SVs.')
+    print(f"budget SVM used {len(svc.alpha_)} SVs.")

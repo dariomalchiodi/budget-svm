@@ -19,13 +19,17 @@ class Solver(ABC):
     of the feasible region.
     """
 
-    def __init__(self, problem='classification'):
+    def __init__(self, problem="classification"):
         self.problem = problem
-        self.solve_dispatch = {'classification': self.solve_classification_problem,
-                               'regression': self.solve_regression_problem}
+        self.solve_dispatch = {
+            "classification": self.solve_classification_problem,
+            "regression": self.solve_regression_problem,
+        }
 
-        self.clip_dispatch = {'classification': self.clip_classification_solution,
-                              'regression': self.clip_regression_solution}
+        self.clip_dispatch = {
+            "classification": self.clip_classification_solution,
+            "regression": self.clip_regression_solution,
+        }
 
     @abstractmethod
     def solve_classification_problem(self, *args, **kwargs):
@@ -101,7 +105,7 @@ class Solver(ABC):
           of the problem."""
 
         if C <= 0:
-            raise ValueError('C should be positive')
+            raise ValueError("C should be positive")
 
         y = np.array(y)
 
@@ -125,8 +129,7 @@ class GurobiSolver(Solver):
     via the gurobipy package.
     """
 
-    def __init__(self, problem='classification', time_limit=60,
-                 initial_values=None):
+    def __init__(self, problem="classification", time_limit=60, initial_values=None):
         """
         Build an object of type GurobiSolver.
 
@@ -143,8 +146,9 @@ class GurobiSolver(Solver):
         self.time_limit = time_limit
         self.initial_values = initial_values
 
-    def solve_classification_problem(self, X, y, C=1, kernel=GaussianKernel(),
-                                     budget=None):
+    def solve_classification_problem(
+        self, X, y, C=1, kernel=GaussianKernel(), budget=None
+    ):
         """Optimize the classification-based optimization problem via gurobi.
 
         Build and solve the constrained optimization problem at the basis
@@ -176,21 +180,20 @@ class GurobiSolver(Solver):
             assert budget > 0
 
         with Env(empty=True) as env:
-            env.setParam('OutputFlag', 0)
+            env.setParam("OutputFlag", 0)
             env.start()
-            with Model('svc', env=env) as model:
-                model.setParam('OutputFlag', 0)
-                model.setParam('TimeLimit', self.time_limit)
+            with Model("svc", env=env) as model:
+                model.setParam("OutputFlag", 0)
+                model.setParam("TimeLimit", self.time_limit)
                 if budget is not None:
                     # model.setParam('NonConvex', 2)
                     pass
 
                 for i in range(m):
-                    model.addVar(name=f'alpha_{i}', lb=0, ub=C,
-                                 vtype=GRB.CONTINUOUS)
+                    model.addVar(name=f"alpha_{i}", lb=0, ub=C, vtype=GRB.CONTINUOUS)
                 if budget is not None:
                     for i in range(m):
-                        model.addVar(name=f'gamma_{i}', vtype=GRB.BINARY)
+                        model.addVar(name=f"gamma_{i}", vtype=GRB.BINARY)
                         # model.addVar(name=f'gamma_{i}', lb=0, ub=1,
                         #             vtype=GRB.CONTINUOUS)
 
@@ -215,8 +218,10 @@ class GurobiSolver(Solver):
                     obj.add(a, 1)
 
                 for i, j in it.product(range(m), range(m)):
-                    obj.add(alpha[i] * alpha[j],
-                            - 0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]))
+                    obj.add(
+                        alpha[i] * alpha[j],
+                        -0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]),
+                    )
 
                 penalty = lambda gamma: -sum([g * (1 - g) for g in gamma])
                 # penalty = lambda gamma: sum([g**g * (1-g)**(1-g) for g in gamma])
@@ -247,20 +252,19 @@ class GurobiSolver(Solver):
 
                 if model.Status != GRB.OPTIMAL:
                     if model.Status != GRB.TIME_LIMIT or model.SolCount == 0:
-                        raise ValueError('no solution found! '
-                                         f'status={model.Status}')
+                        raise ValueError("no solution found! " f"status={model.Status}")
 
                 alpha_opt = np.array([a.x for a in alpha])
                 if budget is not None:
                     gamma_opt = np.array([g.x for g in gamma])
 
-                solution = (alpha_opt, gamma_opt) if budget is not None \
-                    else alpha_opt
+                solution = (alpha_opt, gamma_opt) if budget is not None else alpha_opt
 
                 return np.array(solution), model.Status == GRB.OPTIMAL
 
-    def solve_regression_problem(self, X, y, C=1, kernel=GaussianKernel(),
-                                 epsilon=0.1, budget=None):
+    def solve_regression_problem(
+        self, X, y, C=1, kernel=GaussianKernel(), epsilon=0.1, budget=None
+    ):
         """Optimize via gurobi.
 
         Build and solve the constrained optimization problem at the basis
@@ -283,32 +287,32 @@ class GurobiSolver(Solver):
         m = len(X)
 
         with Env(empty=True) as env:
-            env.setParam('OutputFlag', 0)
+            env.setParam("OutputFlag", 0)
             env.start()
-            with Model('svr', env=env) as model:
-                model.setParam('OutputFlag', 0)
-                model.setParam('TimeLimit', self.time_limit)
+            with Model("svr", env=env) as model:
+                model.setParam("OutputFlag", 0)
+                model.setParam("TimeLimit", self.time_limit)
 
                 for i in range(m):
                     if C < np.inf and budget is None:
-                        model.addVar(name=f'alpha_{i}', lb=0, ub=C,
-                                     vtype=GRB.CONTINUOUS)
-                        model.addVar(name=f'alphahat_{i}', lb=0, ub=C,
-                                     vtype=GRB.CONTINUOUS)
+                        model.addVar(
+                            name=f"alpha_{i}", lb=0, ub=C, vtype=GRB.CONTINUOUS
+                        )
+                        model.addVar(
+                            name=f"alphahat_{i}", lb=0, ub=C, vtype=GRB.CONTINUOUS
+                        )
                     else:
-                        model.addVar(name=f'alpha_{i}', lb=0,
-                                     vtype=GRB.CONTINUOUS)
-                        model.addVar(name=f'alphahat_{i}', lb=0,
-                                     vtype=GRB.CONTINUOUS)
+                        model.addVar(name=f"alpha_{i}", lb=0, vtype=GRB.CONTINUOUS)
+                        model.addVar(name=f"alphahat_{i}", lb=0, vtype=GRB.CONTINUOUS)
                 if budget is not None:
-                    model.addVar(name='gamma', lb=0, vtype=GRB.CONTINUOUS)
+                    model.addVar(name="gamma", lb=0, vtype=GRB.CONTINUOUS)
 
                 model.update()
                 vars = model.getVars()
 
                 gamma = vars[-1]
                 alpha = np.array(vars[:m])
-                alpha_hat = np.array(vars[m:2 * m])
+                alpha_hat = np.array(vars[m : 2 * m])
 
                 if self.initial_values is not None:
                     for a, i in zip(alpha, self.initial_values[0]):
@@ -328,9 +332,10 @@ class GurobiSolver(Solver):
                         obj.add(gamma * budget)
 
                 for i, j in it.product(range(m), range(m)):
-                    obj.add((alpha[i] - alpha_hat[i]) * \
-                            (alpha[j] - alpha_hat[j]),
-                            kernel.compute(X[i], X[j]) * 0.5)
+                    obj.add(
+                        (alpha[i] - alpha_hat[i]) * (alpha[j] - alpha_hat[j]),
+                        kernel.compute(X[i], X[j]) * 0.5,
+                    )
 
                 model.setObjective(obj, GRB.MINIMIZE)
 
@@ -352,8 +357,9 @@ class GurobiSolver(Solver):
                 model.optimize()
 
                 if model.Status != GRB.OPTIMAL:
-                    raise ValueError('optimal solution not found! '
-                                     f'status={model.Status}')
+                    raise ValueError(
+                        "optimal solution not found! " f"status={model.Status}"
+                    )
 
                 alpha_opt = np.array([a.x for a in alpha])
                 alpha_hat_opt = np.array([a.x for a in alpha_hat])
@@ -361,11 +367,16 @@ class GurobiSolver(Solver):
                 if budget is not None:
                     gamma_opt = gamma.x
 
-                solution = (alpha_opt, alpha_hat_opt) \
-                    if budget is None else (alpha_opt, alpha_hat_opt, gamma_opt)
+                solution = (
+                    (alpha_opt, alpha_hat_opt)
+                    if budget is None
+                    else (alpha_opt, alpha_hat_opt, gamma_opt)
+                )
 
                 return np.array(solution)
 
     def __repr__(self):
-        return f"GurobiSolver(time_limit={self.time_limit}, " + \
-            f"initial_values={self.initial_values})"
+        return (
+            f"GurobiSolver(time_limit={self.time_limit}, "
+            + f"initial_values={self.initial_values})"
+        )
