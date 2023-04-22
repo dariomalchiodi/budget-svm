@@ -275,6 +275,7 @@ class PrecomputedKernel(Kernel):
         """
         super().__init__()
         self.precomputed = True
+        return
         try:
             (rows, columns) = np.array(kernel_computations).shape
         except ValueError:

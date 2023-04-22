@@ -217,11 +217,18 @@ class GurobiSolver(Solver):
                 for a in alpha:
                     obj.add(a, 1)
 
-                for i, j in it.product(range(m), range(m)):
-                    obj.add(
-                        alpha[i] * alpha[j],
-                        -0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]),
-                    )
+                if kernel.precomputed:
+                    for i, j in it.product(range(m), range(m)):
+                        obj.add(
+                            alpha[i] * alpha[j],
+                            -0.5 * y[i] * y[j] * X[i][j],
+                        )
+                else:
+                    for i, j in it.product(range(m), range(m)):
+                        obj.add(
+                            alpha[i] * alpha[j],
+                            -0.5 * y[i] * y[j] * kernel.compute(X[i], X[j]),
+                        )
 
                 penalty = lambda gamma: -sum([g * (1 - g) for g in gamma])
                 # penalty = lambda gamma: sum([g**g * (1-g)**(1-g) for g in gamma])

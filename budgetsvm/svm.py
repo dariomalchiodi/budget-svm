@@ -49,6 +49,9 @@ class SVC(ClassifierMixin, BaseEstimator):
     def fit(self, X, y, warn=False):
         X, y = check_X_y(X, y)
 
+        if self.kernel.precomputed and X.shape[0] != X.shape[1]:
+            raise ValueError("Precomputed kernel matrix must be square.")
+
         self.classes_, y = np.unique(y, return_inverse=True)
         if len(self.classes_) == 1:
             raise ValueError("Classifier can't train when only one class is present.")
@@ -56,6 +59,10 @@ class SVC(ClassifierMixin, BaseEstimator):
             raise ValueError(
                 "Classifier can't train when more than two classes are present."
             )
+
+        # store len of training set when using precomputed kernel. predict() needs it to validate input size
+        if self.kernel.precomputed:
+            self.train_set_size_ = len(X)
 
         y = self.__vec_encode_label(y)
 
@@ -65,14 +72,25 @@ class SVC(ClassifierMixin, BaseEstimator):
         )
 
         sv_mask = (0 < alpha) & (alpha < self.C)
+        if self.kernel.precomputed:
+            self.sv_mask_ = sv_mask
 
         self.alpha_ = alpha[sv_mask]
-        self.X_ = X[sv_mask]
+        if not self.kernel.precomputed:
+            self.X_ = X[sv_mask]
         self.y_ = y[sv_mask]
 
-        bs = [
-            y_i - self.__dotprod(x) for x, y_i, a in zip(self.X_, self.y_, self.alpha_)
-        ]
+        if not self.kernel.precomputed:
+            bs = [
+                y_i - self.__dotprod(x)
+                for x, y_i, a in zip(self.X_, self.y_, self.alpha_)
+            ]
+        else:
+            bs = [
+                y_i - self.__dotprod(x)
+                for x, y_i, a in zip(X[self.sv_mask_], self.y_, self.alpha_)
+            ]
+
         if not bs:
             raise FitFailedWarning("no SV founds")
 
@@ -84,6 +102,21 @@ class SVC(ClassifierMixin, BaseEstimator):
         return self
 
     def __dotprod(self, x_new):
+        """
+        x_new is an unknown predict sample if kernel is not precomputed
+        x_new is an array of size n_training_sample where pos i has the kernel value for the predict sample and the i-st
+            training sample
+        """
+        if self.kernel.precomputed:
+            return np.sum(
+                [
+                    a * y_i * precomputed_kernel_value
+                    for precomputed_kernel_value, y_i, a in zip(
+                        x_new[self.sv_mask_], self.y_, self.alpha_
+                    )
+                ]
+            )
+
         return np.sum(
             [
                 a * y_i * self.kernel.compute(x, x_new)
@@ -92,11 +125,27 @@ class SVC(ClassifierMixin, BaseEstimator):
         )
 
     def __decision_function(self, X):
+        """
+        X [samples] if not precomp else
+        X n_samples_test, n_samples_train matrix
+        """
         return np.array([self.__dotprod(x) + self.b_ for x in X])
 
     def predict(self, X):
+        """Predict class on samples in X.
+
+        :param X : array-like of shape (n_samples, n_features)
+            For kernel="precomputed", the expected shape of X is
+            (n_samples_test, n_samples_train).
+        :returns ndarray of shape (n_samples,) the predicted values.
+        """
         check_is_fitted(self)
-        X = check_array(X)
+        if self.kernel.precomputed:
+            if X.shape[1] != self.train_set_size_:
+                raise ValueError("predict when model has been trained with precomputed kernel expects X of shape "
+                                 "(n_sample_test,n_samples_train)")
+        else:
+            X = check_array(X)
         encoded_label = np.sign(self.__decision_function(X))
         return self.__vec_decode_label(encoded_label)
 
