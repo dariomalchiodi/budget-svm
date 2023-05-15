@@ -25,7 +25,8 @@ class Kernel:
         :returns: `float` -- kernel value.
         """
         raise NotImplementedError(
-            'The base class does not implement the `compute` method')
+            "The base class does not implement the `compute` method"
+        )
 
     def __str__(self):
         """Return the string representation of a kernel."""
@@ -78,7 +79,7 @@ class LinearKernel(Kernel):
 
     def __repr__(self):
         """Return the python representation of the kernel."""
-        return 'LinearKernel()'
+        return "LinearKernel()"
 
 
 class PolynomialKernel(Kernel):
@@ -119,8 +120,7 @@ class PolynomialKernel(Kernel):
         return f"PolynomialKernel({self.degree})"
 
     def __eq__(self, other):
-        return isinstance(other, PolynomialKernel) and \
-                self.degree == other.degree
+        return isinstance(other, PolynomialKernel) and self.degree == other.degree
 
 
 class HomogeneousPolynomialKernel(PolynomialKernel):
@@ -154,10 +154,9 @@ class HomogeneousPolynomialKernel(PolynomialKernel):
     def __repr__(self):
         """Return the python representation of the kernel."""
         return f"HomogeneousPolynomialKernel({self.degree})"
-    
+
     def __eq__(self, other):
-        return isinstance(other, PolynomialKernel) and \
-                self.degree == other.degree
+        return isinstance(other, PolynomialKernel) and self.degree == other.degree
 
 
 class GaussianKernel(Kernel):
@@ -176,8 +175,9 @@ class GaussianKernel(Kernel):
         if sigma > 0:
             self.sigma = sigma
         else:
-            raise ValueError(f'{sigma} is not usable '
-                             'as a gaussian standard deviation')
+            raise ValueError(
+                f"{sigma} is not usable " "as a gaussian standard deviation"
+            )
 
     def compute(self, arg_1, arg_2):
         r"""Compute the kernel value.
@@ -193,7 +193,7 @@ class GaussianKernel(Kernel):
         :returns: `float` -- kernel value.
         """
         diff = np.linalg.norm(np.array(arg_1) - np.array(arg_2)) ** 2
-        return float(np.exp(-1. * diff / (2 * self.sigma ** 2)))
+        return float(np.exp(-1.0 * diff / (2 * self.sigma**2)))
 
     def __repr__(self):
         """Return the python representation of the kernel."""
@@ -202,10 +202,9 @@ class GaussianKernel(Kernel):
             obj_repr += f"sigma={self.sigma}"
         obj_repr += ")"
         return obj_repr
-    
+
     def __eq__(self, other):
-        return isinstance(other, GaussianKernel) and \
-                self.sigma == other.sigma
+        return isinstance(other, GaussianKernel) and self.sigma == other.sigma
 
 
 class HyperbolicKernel(Kernel):
@@ -256,8 +255,11 @@ class HyperbolicKernel(Kernel):
             return "HyperbolicKernel()"
 
     def __eq__(self, other):
-        return isinstance(other, HyperbolicKernel) and \
-                self.scale == other.scale and self.offset == other.offset
+        return (
+            isinstance(other, HyperbolicKernel)
+            and self.scale == other.scale
+            and self.offset == other.offset
+        )
 
 
 class PrecomputedKernel(Kernel):
@@ -273,13 +275,14 @@ class PrecomputedKernel(Kernel):
         """
         super().__init__()
         self.precomputed = True
+        return
         try:
             (rows, columns) = np.array(kernel_computations).shape
         except ValueError:
-            raise ValueError('The supplied matrix is not array-like ')
+            raise ValueError("The supplied matrix is not array-like ")
 
         if rows != columns:
-            raise ValueError('The supplied matrix is not square')
+            raise ValueError("The supplied matrix is not square")
 
         self.kernel_computations = kernel_computations
 
@@ -301,7 +304,9 @@ class PrecomputedKernel(Kernel):
     def __repr__(self):
         """Return the python representation of the kernel."""
         return f"PrecomputedKernel({self.kernel_computations})"
-    
+
     def __eq__(self, other):
-        return isinstance(other, PrecomputedKernel) and \
-                self.kernel_computations == other.kernel_computations
+        return (
+            isinstance(other, PrecomputedKernel)
+            and self.kernel_computations == other.kernel_computations
+        )
